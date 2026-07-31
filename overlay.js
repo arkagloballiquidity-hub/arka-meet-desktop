@@ -193,6 +193,7 @@ function open(display, mainWindow) {
     x: b.x, y: b.y, width: b.width, height: b.height,
     transparent: true, frame: false, resizable: false, movable: false,
     hasShadow: false, skipTaskbar: true, focusable: true, show: false,
+    fullscreenable: false,
     enableLargerThanScreen: true,
     webPreferences: { nodeIntegration: true, contextIsolation: false },
   });
@@ -206,8 +207,10 @@ function open(display, mainWindow) {
   );
   overlayWin.once("ready-to-show", () => {
     overlayWin.showInactive();
-    // macOS may have nudged us below the menu bar; insist on full bounds.
-    overlayWin.setBounds(b);
+    // Simple fullscreen is the one mode macOS guarantees covers the WHOLE
+    // display, menu bar included — geometry stops being a guess. The page's
+    // measured math (screenX/Y vs display origin) stays as belt-and-braces.
+    overlayWin.setSimpleFullScreen(true);
   });
 
   toolbarWin = new BrowserWindow({
