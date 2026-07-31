@@ -64,7 +64,11 @@ function createWindow() {
     minHeight: 520,
     title: "ARKA Meet",
     backgroundColor: "#030509",
-    titleBarStyle: "hiddenInset",
+    // A real title bar, deliberately. With "hiddenInset" the video grid ran
+    // edge to edge under the traffic lights, leaving nowhere to grab the
+    // window and nothing to click past the tiles. Zoom keeps a title bar for
+    // the same reason.
+    titleBarStyle: "default",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -130,6 +134,11 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // The web app IS the product, so a stale HTTP cache means the desktop app
+  // silently runs an old build — which is how it ended up without fixes the
+  // browser already had. Clearing on launch keeps "it updates itself" true.
+  await session.defaultSession.clearCache().catch(() => null);
+
   await ensureMediaAccess();
   createWindow();
 
