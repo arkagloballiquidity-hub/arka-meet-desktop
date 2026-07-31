@@ -10,7 +10,14 @@
  * rebuilding this app.
  */
 
-const { app, BrowserWindow, session, shell, systemPreferences } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  dialog,
+  session,
+  shell,
+  systemPreferences,
+} = require("electron");
 const picker = require("./picker");
 
 const APP_URL = "https://meet.arkaltd.io";
@@ -27,21 +34,26 @@ function isOurs(url) {
   }
 }
 
-// Google sign-in MUST complete inside this window: the OAuth state cookie is
-// set here, so finishing the flow in Safari lands on a session the app never
-// sees (and a state mismatch besides). Google blocks known embedded webviews
-// by user-agent, so the Electron token is stripped below.
-function isAuthFlow(url) {
+// Sign-in happens in the SYSTEM browser: Electron's webview cannot talk to
+// the Mac's passkeys (Touch ID / iCloud Keychain), which forced the "try
+// another way" dance. The system browser does the whole ceremony and hands
+// the session back through arka-meet:// (see open-url below).
+function isLoginPath(url) {
   try {
-    const host = new URL(url).host;
+    const u = new URL(url);
     return (
-      host === "accounts.google.com" ||
-      host.endsWith(".google.com") ||
-      host === "accounts.youtube.com"
+      (u.host === APP_HOST && u.pathname === "/api/auth/login") ||
+      u.host === "accounts.google.com" ||
+      u.host.endsWith(".google.com") ||
+      u.host === "accounts.youtube.com"
     );
   } catch {
     return false;
   }
+}
+
+function openSystemLogin() {
+  shell.openExternal(`${APP_URL}/api/auth/login?flow=desktop`);
 }
 
 async function ensureMediaAccess() {
@@ -54,6 +66,33 @@ async function ensureMediaAccess() {
   } catch {
     /* user said no — Jitsi will surface it in-call */
   }
+}
+
+let mainWindow = null;
+
+// macOS ties the Screen Recording grant to the binary's signature; ad-hoc
+// builds sign differently on every release, so the old grant looks "on" in
+// System Settings while the new binary is actually denied. Detect and guide.
+async function ensureScreenPermission() {
+  const status = systemPreferences.getMediaAccessStatus("screen");
+  if (status === "granted") return true;
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: "info",
+    title: "Permiso de grabación de pantalla",
+    message: "macOS no le está dando a ARKA Meet acceso a la pantalla.",
+    detail:
+      "En Ajustes del Sistema → Privacidad y seguridad → Grabación de pantalla: " +
+      "quita ARKA Meet de la lista (botón −), vuelve a añadirla (+) y reinicia la app. " +
+      "Tras actualizar la app, macOS exige repetir este paso.",
+    buttons: ["Abrir Ajustes", "Cancelar"],
+    defaultId: 0,
+  });
+  if (response === 0) {
+    shell.openExternal(
+      "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+    );
+  }
+  return false;
 }
 
 function createWindow() {
@@ -92,6 +131,10 @@ function createWindow() {
   session.defaultSession.setDisplayMediaRequestHandler(
     async (request, callback) => {
       try {
+        if (!(await ensureScreenPermission())) {
+          callback({});
+          return;
+        }
         const source = await picker.choose(win);
         if (!source) {
           // Electron has no "cancelled" signal; an empty grant is the way to
@@ -114,24 +157,63 @@ function createWindow() {
     .replace(/\sarka-meet-desktop\/[\d.]+/, "");
   win.webContents.setUserAgent(cleanUA);
 
-  // Sign-in stays in-window; anything else external (Calendar links etc.)
-  // opens in the real browser.
+  // Login goes to the system browser (passkeys); anything else external
+  // (Calendar links etc.) opens there too. Only our own origins stay in-app.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (isOurs(url) || isAuthFlow(url)) return { action: "allow" };
+    if (isLoginPath(url)) {
+      openSystemLogin();
+      return { action: "deny" };
+    }
+    if (isOurs(url)) return { action: "allow" };
     shell.openExternal(url);
     return { action: "deny" };
   });
 
   win.webContents.on("will-navigate", (event, url) => {
-    if (!isOurs(url) && !isAuthFlow(url)) {
+    if (isLoginPath(url)) {
+      event.preventDefault();
+      openSystemLogin();
+      return;
+    }
+    if (!isOurs(url)) {
       event.preventDefault();
       shell.openExternal(url);
     }
   });
 
   win.loadURL(APP_URL);
+  mainWindow = win;
+  win.on("closed", () => {
+    if (mainWindow === win) mainWindow = null;
+  });
   return win;
 }
+
+// arka-meet://auth?code=… — the system browser hands the session back here.
+function handleDeepLink(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "arka-meet:") return;
+    const code = u.searchParams.get("code");
+    if (!code) return;
+    const win = mainWindow ?? createWindow();
+    win.loadURL(
+      `${APP_URL}/api/auth/desktop-exchange?code=${encodeURIComponent(code)}`,
+    );
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  } catch {
+    /* not ours */
+  }
+}
+
+app.setAsDefaultProtocolClient("arka-meet");
+
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  if (app.isReady()) handleDeepLink(url);
+  else app.whenReady().then(() => handleDeepLink(url));
+});
 
 app.whenReady().then(async () => {
   // The web app IS the product, so a stale HTTP cache means the desktop app
