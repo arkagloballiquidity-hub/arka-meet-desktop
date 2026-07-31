@@ -26,6 +26,23 @@ function isOurs(url) {
   }
 }
 
+// Google sign-in MUST complete inside this window: the OAuth state cookie is
+// set here, so finishing the flow in Safari lands on a session the app never
+// sees (and a state mismatch besides). Google blocks known embedded webviews
+// by user-agent, so the Electron token is stripped below.
+function isAuthFlow(url) {
+  try {
+    const host = new URL(url).host;
+    return (
+      host === "accounts.google.com" ||
+      host.endsWith(".google.com") ||
+      host === "accounts.youtube.com"
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function ensureMediaAccess() {
   // Triggers the macOS system prompts (TCC) on first launch, so the call
   // screen never sits waiting on a permission the user was never asked for.
@@ -64,18 +81,23 @@ function createWindow() {
     },
   );
 
-  // Links outside ARKA (e.g. "Agregar a Google Calendar") open in the real
-  // browser, never inside this window.
+  // Google's webview blocklist keys on the Electron UA token.
+  const cleanUA = win.webContents
+    .getUserAgent()
+    .replace(/\sElectron\/[\d.]+/, "")
+    .replace(/\sarka-meet-desktop\/[\d.]+/, "");
+  win.webContents.setUserAgent(cleanUA);
+
+  // Sign-in stays in-window; anything else external (Calendar links etc.)
+  // opens in the real browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (!isOurs(url)) {
-      shell.openExternal(url);
-      return { action: "deny" };
-    }
-    return { action: "allow" };
+    if (isOurs(url) || isAuthFlow(url)) return { action: "allow" };
+    shell.openExternal(url);
+    return { action: "deny" };
   });
 
   win.webContents.on("will-navigate", (event, url) => {
-    if (!isOurs(url)) {
+    if (!isOurs(url) && !isAuthFlow(url)) {
       event.preventDefault();
       shell.openExternal(url);
     }
