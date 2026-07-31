@@ -228,6 +228,39 @@ function handleDeepLink(url) {
   }
 }
 
+// The web layer updates itself (cache cleared each launch); this covers the
+// SHELL. When GitHub has a newer release, offer the download like any app.
+async function checkShellUpdate() {
+  try {
+    const response = await fetch(
+      "https://api.github.com/repos/arkagloballiquidity-hub/arka-meet-desktop/releases/latest",
+      { headers: { Accept: "application/vnd.github+json" } },
+    );
+    if (!response.ok) return;
+    const release = await response.json();
+    const latest = String(release.tag_name || "").replace(/^v/, "");
+    if (!latest || latest === app.getVersion()) return;
+
+    const { response: choice } = await dialog.showMessageBox({
+      type: "info",
+      title: "Actualización disponible",
+      message: `Hay una versión nueva de ARKA Meet (${latest}).`,
+      detail:
+        `Tienes la ${app.getVersion()}. Descarga el instalador, arrastra la app a Aplicaciones ` +
+        "y reemplaza la actual.",
+      buttons: ["Descargar", "Después"],
+      defaultId: 0,
+    });
+    if (choice === 0) {
+      shell.openExternal(
+        "https://github.com/arkagloballiquidity-hub/arka-meet-desktop/releases/latest/download/ARKA-Meet-AppleSilicon.dmg",
+      );
+    }
+  } catch {
+    /* offline or rate-limited — try again next launch */
+  }
+}
+
 app.setAsDefaultProtocolClient("arka-meet");
 
 app.on("open-url", (event, url) => {
@@ -244,6 +277,10 @@ app.whenReady().then(async () => {
 
   await ensureMediaAccess();
   createWindow();
+
+  // Once at launch and then every 6 hours for long-lived sessions.
+  checkShellUpdate();
+  setInterval(checkShellUpdate, 6 * 60 * 60 * 1000);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
