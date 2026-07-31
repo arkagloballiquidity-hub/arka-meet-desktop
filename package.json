@@ -1,0 +1,32 @@
+{
+  "name": "arka-meet-desktop",
+  "productName": "ARKA Meet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ARKA Meet para macOS — ventana nativa sobre meet.arkaltd.io",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:mac": "electron-builder --mac"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "io.arkaltd.meet",
+    "productName": "ARKA Meet",
+    "mac": {
+      "category": "public.app-category.business",
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "icon": "build/icon.png",
+      "identity": null,
+      "hardenedRuntime": false
+    },
+    "dmg": {
+      "title": "ARKA Meet",
+      "backgroundColor": "#030509"
+    },
+    "files": ["main.js", "build/icon.png"]
+  }
+}
