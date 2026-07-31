@@ -18,7 +18,13 @@ const {
   shell,
   systemPreferences,
 } = require("electron");
+const path = require("path");
 const picker = require("./picker");
+const overlay = require("./overlay");
+const { ipcMain, screen } = require("electron");
+
+// The display being shared, so the annotation overlay knows where to live.
+let sharedDisplay = null;
 
 const APP_URL = "https://meet.arkaltd.io";
 const APP_HOST = new URL(APP_URL).host;
@@ -112,6 +118,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: path.join(__dirname, "preload.js"),
     },
   });
 
@@ -156,6 +163,15 @@ function createWindow() {
           // tell the page nothing was picked.
           callback({});
           return;
+        }
+        // Full-screen shares get the on-screen annotation overlay; window
+        // shares stay in-app (their bounds move under our feet).
+        sharedDisplay = null;
+        if (source.display_id) {
+          sharedDisplay =
+            screen
+              .getAllDisplays()
+              .find((d) => String(d.id) === String(source.display_id)) ?? null;
         }
         // System-audio loopback only exists on Windows; requesting it on
         // macOS makes the whole capture fail and the share never starts.
@@ -261,6 +277,19 @@ async function checkShellUpdate() {
   }
 }
 
+// Overlay lifecycle: the web app reports share start/stop, annotations flow
+// both ways through it.
+ipcMain.on("arka-share-started", (event) => {
+  if (sharedDisplay && mainWindow) overlay.open(sharedDisplay, mainWindow);
+});
+ipcMain.on("arka-share-stopped", () => {
+  sharedDisplay = null;
+  overlay.close();
+});
+ipcMain.on("arka-annotate-to-overlay", (_event, payload) => {
+  overlay.paint(payload);
+});
+
 app.setAsDefaultProtocolClient("arka-meet");
 
 app.on("open-url", (event, url) => {
@@ -288,6 +317,9 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
+  overlay.close();
   // macOS convention: the app lives in the Dock until quit explicitly.
   if (process.platform !== "darwin") app.quit();
 });
+
+app.on("before-quit", () => overlay.close());
