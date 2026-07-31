@@ -115,13 +115,28 @@ function createWindow() {
     },
   });
 
-  // Web permission prompts (getUserMedia, screen share) auto-granted for our
-  // own origins only — the OS-level TCC permission is still the real gate.
+  // Web permission prompts (getUserMedia, screen share, clipboard) auto-
+  // granted for our own origins only — the OS-level TCC permission is still
+  // the real gate. Clipboard matters: without it "Copiar invitación" fails
+  // silently.
+  const ALLOWED_PERMISSIONS = [
+    "media",
+    "display-capture",
+    "notifications",
+    "clipboard-sanitized-write",
+    "clipboard-write",
+    "clipboard-read",
+  ];
   session.defaultSession.setPermissionRequestHandler(
     (webContents, permission, callback) => {
       const ours = isOurs(webContents.getURL());
-      const allowed = ["media", "display-capture", "notifications"];
-      callback(ours && allowed.includes(permission));
+      callback(ours && ALLOWED_PERMISSIONS.includes(permission));
+    },
+  );
+  session.defaultSession.setPermissionCheckHandler(
+    (webContents, permission, requestingOrigin) => {
+      const ours = isOurs(requestingOrigin || webContents?.getURL?.() || "");
+      return ours && ALLOWED_PERMISSIONS.includes(permission);
     },
   );
 
@@ -142,7 +157,13 @@ function createWindow() {
           callback({});
           return;
         }
-        callback({ video: source, audio: "loopback" });
+        // System-audio loopback only exists on Windows; requesting it on
+        // macOS makes the whole capture fail and the share never starts.
+        if (process.platform === "win32") {
+          callback({ video: source, audio: "loopback" });
+        } else {
+          callback({ video: source });
+        }
       } catch {
         callback({});
       }
