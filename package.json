@@ -1,7 +1,7 @@
 {
   "name": "arka-meet-desktop",
   "productName": "ARKA Meet",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "ARKA Meet para macOS — ventana nativa sobre meet.arkaltd.io",
   "main": "main.js",
@@ -27,6 +27,6 @@
       "title": "ARKA Meet",
       "backgroundColor": "#030509"
     },
-    "files": ["main.js", "build/icon.png"]
+    "files": ["main.js", "picker.js", "build/icon.png"]
   }
 }

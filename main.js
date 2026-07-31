@@ -11,6 +11,7 @@
  */
 
 const { app, BrowserWindow, session, shell, systemPreferences } = require("electron");
+const picker = require("./picker");
 
 const APP_URL = "https://meet.arkaltd.io";
 const APP_HOST = new URL(APP_URL).host;
@@ -79,6 +80,27 @@ function createWindow() {
       const allowed = ["media", "display-capture", "notifications"];
       callback(ours && allowed.includes(permission));
     },
+  );
+
+  // Our own share chooser, Zoom-style. This is the one thing a browser cannot
+  // give us: Safari and Chrome each force their own dialog, while here we
+  // enumerate screens and windows ourselves and present them with thumbnails.
+  session.defaultSession.setDisplayMediaRequestHandler(
+    async (request, callback) => {
+      try {
+        const source = await picker.choose(win);
+        if (!source) {
+          // Electron has no "cancelled" signal; an empty grant is the way to
+          // tell the page nothing was picked.
+          callback({});
+          return;
+        }
+        callback({ video: source, audio: "loopback" });
+      } catch {
+        callback({});
+      }
+    },
+    { useSystemPicker: false },
   );
 
   // Google's webview blocklist keys on the Electron UA token.
