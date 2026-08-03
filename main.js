@@ -281,10 +281,13 @@ async function checkShellUpdate() {
 // both ways through it.
 ipcMain.on("arka-share-started", (event) => {
   if (sharedDisplay && mainWindow) overlay.open(sharedDisplay, mainWindow);
+  // The meeting window stays out of its own share (no mirror effect).
+  mainWindow?.setContentProtection(true);
 });
 ipcMain.on("arka-share-stopped", () => {
   sharedDisplay = null;
   overlay.close();
+  mainWindow?.setContentProtection(false);
 });
 ipcMain.on("arka-annotate-to-overlay", (_event, payload) => {
   overlay.paint(payload);

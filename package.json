@@ -1,7 +1,7 @@
 {
   "name": "arka-meet-desktop",
   "productName": "ARKA Meet",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
   "description": "ARKA Meet para macOS — ventana nativa sobre meet.arkaltd.io",
   "main": "main.js",

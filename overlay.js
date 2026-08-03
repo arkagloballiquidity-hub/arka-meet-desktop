@@ -200,6 +200,10 @@ function open(display, mainWindow) {
   overlayWin.setAlwaysOnTop(true, "screen-saver");
   overlayWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   overlayWin.setIgnoreMouseEvents(true);
+  // Excluded from screen capture: a transparent Electron window composites
+  // as SOLID BLACK in the captured stream — viewers were getting a black
+  // screen. Zoom excludes its own windows the same way.
+  overlayWin.setContentProtection(true);
   overlayWin.loadURL(
     `data:text/html;charset=utf-8,${encodeURIComponent(
       overlayHtml({ x: b.x, y: b.y, width: b.width, height: b.height }),
@@ -223,6 +227,7 @@ function open(display, mainWindow) {
   });
   toolbarWin.setAlwaysOnTop(true, "screen-saver");
   toolbarWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  toolbarWin.setContentProtection(true);
   toolbarWin.loadURL(
     `data:text/html;charset=utf-8,${encodeURIComponent(toolbarHtml())}`,
   );
